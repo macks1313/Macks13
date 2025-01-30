@@ -17,6 +17,10 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 CHROME_DRIVER_PATH = "/usr/local/bin/chromedriver"
 GOOGLE_CHROME_PATH = "/usr/local/bin/google-chrome"
 
+# Vérification des variables d'environnement
+if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
+    raise Exception("Les variables d'environnement TWITTER_USERNAME, TWITTER_PASSWORD ou OPENAI_API_KEY sont manquantes.")
+
 # Initialisation de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
 
@@ -28,12 +32,15 @@ options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.binary_location = GOOGLE_CHROME_PATH
 
-# Initialisation du driver
-driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
+try:
+    driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
+except WebDriverException as e:
+    raise Exception(f"Erreur lors de l'initialisation de Selenium : {e}")
 
 # Connexion à Twitter
 def login_to_twitter():
     try:
+        print("Connexion à Twitter...")
         driver.get("https://twitter.com/login")
         wait = WebDriverWait(driver, 15)
 
@@ -49,13 +56,14 @@ def login_to_twitter():
 
         print("Connexion réussie.")
     except TimeoutException:
-        print("Erreur lors de la connexion à Twitter.")
-        driver.quit()
-        raise
+        raise Exception("Erreur de connexion : timeout expiré.")
+    except Exception as e:
+        raise Exception(f"Erreur lors de la connexion à Twitter : {e}")
 
-# Récupérer et traiter les messages privés (DM)
+# Fonction pour gérer les messages privés (DM)
 def handle_direct_messages():
     try:
+        print("Chargement des messages privés...")
         driver.get("https://twitter.com/messages")
         wait = WebDriverWait(driver, 10)
 
@@ -83,12 +91,13 @@ def handle_direct_messages():
 
     except TimeoutException:
         print("Erreur : impossible de charger les messages.")
-    except WebDriverException as e:
-        print(f"Erreur WebDriver : {e}")
+    except Exception as e:
+        print(f"Erreur lors de la gestion des messages : {e}")
 
-# Générer une réponse avec ChatGPT
+# Fonction pour générer une réponse avec ChatGPT
 def generate_response_with_gpt(message):
     try:
+        print("Génération de la réponse avec ChatGPT...")
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -103,19 +112,21 @@ def generate_response_with_gpt(message):
         print(f"Erreur lors de la génération de la réponse : {e}")
         return "Désolé, je ne peux pas répondre pour le moment."
 
-# Envoyer un message privé
+# Fonction pour envoyer un message privé
 def send_message(response):
     try:
+        print(f"Envoi de la réponse : {response}")
         message_input = driver.find_element(By.XPATH, "//div[@data-testid='dmComposerTextInput']")
         message_input.send_keys(response)
         message_input.send_keys(Keys.RETURN)
-        print(f"Réponse envoyée : {response}")
+        print("Réponse envoyée.")
     except NoSuchElementException:
         print("Erreur : impossible de trouver le champ d'entrée de message.")
 
-# Poster un tweet
+# Fonction pour poster un tweet
 def post_tweet(content):
     try:
+        print("Publication d'un tweet...")
         driver.get("https://twitter.com/compose/tweet")
         wait = WebDriverWait(driver, 10)
 
@@ -132,10 +143,13 @@ def post_tweet(content):
         print("Erreur : impossible de poster le tweet.")
     except NoSuchElementException:
         print("Erreur : élément du tweet non trouvé.")
+    except Exception as e:
+        print(f"Erreur lors de la publication du tweet : {e}")
 
-# Générer un tweet avec ChatGPT
+# Fonction pour générer un contenu de tweet avec ChatGPT
 def generate_tweet_content():
     try:
+        print("Génération du contenu du tweet avec ChatGPT...")
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -153,6 +167,7 @@ def generate_tweet_content():
 # Lancer le bot en boucle
 if __name__ == "__main__":
     try:
+        print("Lancement du bot...")
         login_to_twitter()
 
         last_tweet_time = None
@@ -170,5 +185,4 @@ if __name__ == "__main__":
             time.sleep(60)
     except Exception as e:
         print(f"Erreur fatale : {e}")
-    finally:
         driver.quit()
