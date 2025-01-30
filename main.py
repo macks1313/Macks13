@@ -58,7 +58,7 @@ def login_to_twitter():
     try:
         logging.info("Connexion à Twitter...")
         driver.get("https://twitter.com/login")
-        wait = WebDriverWait(driver, 15)
+        wait = WebDriverWait(driver, 30)
 
         # Entrer le nom d'utilisateur
         username_field = wait.until(EC.presence_of_element_located((By.NAME, "text")))
@@ -83,9 +83,10 @@ def handle_direct_messages():
     try:
         logging.info("Chargement des messages privés...")
         driver.get("https://twitter.com/messages")
-        wait = WebDriverWait(driver, 10)
+        wait = WebDriverWait(driver, 30)  # Augmenter le délai d'attente
 
-        conversations = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//a[contains(@href, '/messages/')]")))
+        # XPath pour les conversations
+        conversations = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//div[@data-testid='conversation']")))
 
         for conversation in conversations:
             try:
@@ -104,7 +105,8 @@ def handle_direct_messages():
                 continue
 
     except TimeoutException:
-        logging.error("Erreur : impossible de charger les messages.")
+        driver.save_screenshot("screenshot_error.png")
+        logging.error("Erreur : impossible de charger les messages. Capture d'écran sauvegardée.")
     except Exception as e:
         logging.error(f"Erreur lors de la gestion des messages : {e}")
 
