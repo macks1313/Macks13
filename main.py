@@ -1,6 +1,8 @@
 import os
 import time
 from datetime import datetime
+import traceback
+import logging
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -9,7 +11,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 import openai
-import traceback
+
+# Configuration des logs
+logging.basicConfig(
+    filename="bot_debug.log",
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # Configuration des variables d'environnement
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
@@ -20,14 +28,15 @@ GOOGLE_CHROME_PATH = "/usr/local/bin/google-chrome"
 
 # Vérification des variables d'environnement
 if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
+    logging.critical("Les variables d'environnement TWITTER_USERNAME, TWITTER_PASSWORD ou OPENAI_API_KEY sont manquantes.")
     raise Exception("Les variables d'environnement TWITTER_USERNAME, TWITTER_PASSWORD ou OPENAI_API_KEY sont manquantes.")
 
 # Initialisation de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Initialisation de Selenium avec options optimisées
+# Initialisation de Selenium
 options = webdriver.ChromeOptions()
-options.add_argument("--headless")  # Exécution en mode headless
+options.add_argument("--headless")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
@@ -36,16 +45,17 @@ options.add_argument("--disable-backgrounding-occluded-windows")
 options.add_argument("--disable-renderer-backgrounding")
 options.binary_location = GOOGLE_CHROME_PATH
 
-# Initialisation du driver Selenium
 try:
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
+    logging.info("Initialisation du driver Selenium réussie.")
 except WebDriverException as e:
-    raise Exception(f"Erreur lors de l'initialisation de Selenium : {e}")
+    logging.critical(f"Erreur lors de l'initialisation de Selenium : {e}")
+    raise
 
 # Connexion à Twitter
 def login_to_twitter():
     try:
-        print("Connexion à Twitter...")
+        logging.info("Connexion à Twitter...")
         driver.get("https://twitter.com/login")
         wait = WebDriverWait(driver, 15)
 
@@ -59,16 +69,18 @@ def login_to_twitter():
         password_field.send_keys(TWITTER_PASSWORD)
         password_field.send_keys(Keys.RETURN)
 
-        print("Connexion réussie.")
+        logging.info("Connexion réussie.")
     except TimeoutException:
-        raise Exception("Erreur de connexion : timeout expiré.")
+        logging.error("Erreur de connexion : timeout expiré.")
+        raise
     except Exception as e:
-        raise Exception(f"Erreur lors de la connexion à Twitter : {e}")
+        logging.error(f"Erreur lors de la connexion à Twitter : {e}")
+        raise
 
 # Gestion des messages privés (DM)
 def handle_direct_messages():
     try:
-        print("Chargement des messages privés...")
+        logging.info("Chargement des messages privés...")
         driver.get("https://twitter.com/messages")
         wait = WebDriverWait(driver, 10)
 
@@ -84,25 +96,25 @@ def handle_direct_messages():
                 messages = driver.find_elements(By.XPATH, "//div[@data-testid='messageEntry']")
                 last_message = messages[-1].text if messages else "Aucun message trouvé."
 
-                print(f"Message reçu : {last_message}")
+                logging.info(f"Message reçu : {last_message}")
 
                 # Générer une réponse avec ChatGPT
                 response = generate_response_with_gpt(last_message)
                 send_message(response)
 
             except Exception as e:
-                print(f"Erreur lors de la lecture d'une conversation : {e}")
+                logging.error(f"Erreur lors de la lecture d'une conversation : {e}")
                 continue
 
     except TimeoutException:
-        print("Erreur : impossible de charger les messages.")
+        logging.error("Erreur : impossible de charger les messages.")
     except Exception as e:
-        print(f"Erreur lors de la gestion des messages : {e}")
+        logging.error(f"Erreur lors de la gestion des messages : {e}")
 
 # Génération de réponse avec ChatGPT
 def generate_response_with_gpt(message):
     try:
-        print("Génération de la réponse avec ChatGPT...")
+        logging.info("Génération de la réponse avec ChatGPT...")
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -114,26 +126,26 @@ def generate_response_with_gpt(message):
         )
         return response['choices'][0]['message']['content'].strip()
     except Exception as e:
-        print(f"Erreur lors de la génération de la réponse : {e}")
+        logging.error(f"Erreur lors de la génération de la réponse : {e}")
         return "Désolé, je ne peux pas répondre pour le moment."
 
 # Envoi d'un message privé
 def send_message(response):
     try:
-        print(f"Envoi de la réponse : {response}")
+        logging.info(f"Envoi de la réponse : {response}")
         message_input = driver.find_element(By.XPATH, "//div[@data-testid='dmComposerTextInput']")
         message_input.send_keys(response)
         message_input.send_keys(Keys.RETURN)
-        print("Réponse envoyée.")
+        logging.info("Réponse envoyée.")
     except NoSuchElementException:
-        print("Erreur : impossible de trouver le champ d'entrée de message.")
+        logging.error("Erreur : impossible de trouver le champ d'entrée de message.")
     except Exception as e:
-        print(f"Erreur lors de l'envoi du message : {e}")
+        logging.error(f"Erreur lors de l'envoi du message : {e}")
 
 # Publication d'un tweet
 def post_tweet(content):
     try:
-        print("Publication d'un tweet...")
+        logging.info("Publication d'un tweet...")
         driver.get("https://twitter.com/compose/tweet")
         wait = WebDriverWait(driver, 10)
 
@@ -145,18 +157,18 @@ def post_tweet(content):
         tweet_button = driver.find_element(By.XPATH, "//div[@data-testid='tweetButtonInline']")
         tweet_button.click()
 
-        print(f"Tweet posté : {content}")
+        logging.info(f"Tweet posté : {content}")
     except TimeoutException:
-        print("Erreur : impossible de poster le tweet.")
+        logging.error("Erreur : impossible de poster le tweet.")
     except NoSuchElementException:
-        print("Erreur : élément du tweet non trouvé.")
+        logging.error("Erreur : élément du tweet non trouvé.")
     except Exception as e:
-        print(f"Erreur lors de la publication du tweet : {e}")
+        logging.error(f"Erreur lors de la publication du tweet : {e}")
 
 # Génération de contenu de tweet avec ChatGPT
 def generate_tweet_content():
     try:
-        print("Génération du contenu du tweet avec ChatGPT...")
+        logging.info("Génération du contenu du tweet avec ChatGPT...")
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
@@ -168,13 +180,13 @@ def generate_tweet_content():
         )
         return response['choices'][0]['message']['content'].strip()
     except Exception as e:
-        print(f"Erreur lors de la génération du tweet : {e}")
+        logging.error(f"Erreur lors de la génération du tweet : {e}")
         return "Une petite dose de motivation... ou pas !"
 
 # Lancement du bot en boucle
 if __name__ == "__main__":
     try:
-        print("Lancement du bot...")
+        logging.info("Lancement du bot...")
         login_to_twitter()
 
         last_tweet_time = None
@@ -189,8 +201,10 @@ if __name__ == "__main__":
                 post_tweet(tweet_content)
                 last_tweet_time = current_time
 
+            logging.info("Pause de 60 secondes avant la prochaine vérification.")
             time.sleep(60)
     except Exception as e:
+        logging.critical("Erreur fatale détectée !", exc_info=True)
         print("Erreur fatale détectée !")
-        print(traceback.format_exc())  # Affiche le traceback complet de l'erreur
+        print(traceback.format_exc())
         driver.quit()
