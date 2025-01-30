@@ -24,12 +24,15 @@ if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
 # Initialisation de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Initialisation de Selenium
+# Initialisation de Selenium avec options optimisées
 options = webdriver.ChromeOptions()
-options.add_argument("--headless")
+options.add_argument("--headless")  # Exécution en mode headless
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-background-timer-throttling")
+options.add_argument("--disable-backgrounding-occluded-windows")
+options.add_argument("--disable-renderer-backgrounding")
 options.binary_location = GOOGLE_CHROME_PATH
 
 try:
