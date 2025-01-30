@@ -28,14 +28,14 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 CHROME_DRIVER_PATH = "/app/.chrome-for-testing/chromedriver-linux64/chromedriver"
 GOOGLE_CHROME_PATH = "/app/.chrome-for-testing/chrome-linux64/chrome"
 
-# Vérification des chemins de ChromeDriver et de Google Chrome
-logging.info(f"Vérification du chemin ChromeDriver : {shutil.which('chromedriver')}")
-logging.info(f"Vérification du chemin Google Chrome : {shutil.which('google-chrome')}")
+# Vérification des chemins
+logging.info(f"Chemin ChromeDriver : {shutil.which('chromedriver')}")
+logging.info(f"Chemin Google Chrome : {shutil.which('google-chrome')}")
 
 # Vérification des variables d'environnement
 if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
-    logging.critical("Les variables d'environnement TWITTER_USERNAME, TWITTER_PASSWORD ou OPENAI_API_KEY sont manquantes.")
-    raise Exception("Les variables d'environnement manquent.")
+    logging.critical("Variables d'environnement manquantes.")
+    raise Exception("Les variables d'environnement nécessaires sont absentes.")
 
 # Initialisation de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
@@ -46,16 +46,14 @@ options.add_argument("--headless")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-software-rasterizer")
-options.add_argument("--remote-debugging-port=9222")
 options.binary_location = GOOGLE_CHROME_PATH
 
 try:
     logging.info("Initialisation de Selenium...")
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
-    logging.info("Initialisation du driver Selenium réussie.")
+    logging.info("Initialisation réussie.")
 except WebDriverException as e:
-    logging.critical(f"Erreur lors de l'initialisation de Selenium : {e}")
+    logging.critical(f"Erreur Selenium : {e}")
     raise
 
 # Connexion à Twitter
@@ -75,12 +73,11 @@ def login_to_twitter():
 
         logging.info("Connexion réussie.")
         driver.save_screenshot("screenshot_after_login.png")
-        logging.info("Capture d'écran après connexion sauvegardée.")
     except TimeoutException:
-        logging.error("Erreur de connexion : délai expiré.")
+        logging.error("Erreur de connexion (délai expiré).")
         raise
     except Exception as e:
-        logging.error(f"Erreur lors de la connexion à Twitter : {e}")
+        logging.error(f"Erreur lors de la connexion : {e}")
         raise
 
 # Gestion des messages privés
@@ -145,13 +142,17 @@ def send_message(message):
     except Exception as e:
         logging.error(f"Erreur lors de l'envoi du message : {e}")
 
-# Fonction principale
+# Fonction principale avec boucle infinie
 def main():
     login_to_twitter()
     while True:
-        handle_direct_messages()
-        logging.info("Pause de 60 secondes avant la prochaine vérification.")
-        time.sleep(60)
+        try:
+            handle_direct_messages()
+            logging.info("Pause de 60 secondes avant la prochaine vérification.")
+            time.sleep(60)
+        except Exception as e:
+            logging.error(f"Erreur dans la boucle principale : {e}")
+            time.sleep(10)  # Pause avant de réessayer pour éviter un crash immédiat
 
 if __name__ == "__main__":
     try:
