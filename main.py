@@ -160,6 +160,24 @@ def post_tweet(content):
     except Exception as e:
         logging.error(f"Erreur lors de la publication du tweet : {e}")
 
+# Génération de contenu de tweet avec ChatGPT
+def generate_tweet_content():
+    try:
+        logging.info("Génération du contenu du tweet avec ChatGPT...")
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Tu es un bot Twitter spécialisé dans les tweets drôles et motivants sur le développement personnel."},
+                {"role": "user", "content": "Donne-moi un tweet drôle et motivant."}
+            ],
+            max_tokens=50,
+            temperature=0.8
+        )
+        return response['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        logging.error(f"Erreur lors de la génération du tweet : {e}")
+        return "Une petite dose de motivation... ou pas !"
+
 # Lancement du bot
 if __name__ == "__main__":
     try:
