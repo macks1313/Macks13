@@ -1,6 +1,5 @@
 import os
 import time
-import random
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -8,34 +7,35 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 import openai
 
 # Configuration des variables d'environnement
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 TWITTER_PASSWORD = os.environ.get("TWITTER_PASSWORD")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-CHROME_DRIVER_PATH = "/usr/local/bin/chromedriver"  # Chemin du ChromeDriver installé
-GOOGLE_CHROME_PATH = "/usr/local/bin/google-chrome"  # Chemin de Chrome installé
+CHROME_DRIVER_PATH = "/usr/local/bin/chromedriver"
+GOOGLE_CHROME_PATH = "/usr/local/bin/google-chrome"
 
 # Initialisation de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
 
 # Initialisation de Selenium
 options = webdriver.ChromeOptions()
-options.add_argument("--headless")  # Exécution en mode headless
+options.add_argument("--headless")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.binary_location = GOOGLE_CHROME_PATH  # Chemin vers Chrome
+options.binary_location = GOOGLE_CHROME_PATH
 
+# Initialisation du driver
 driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
 
 # Connexion à Twitter
 def login_to_twitter():
     try:
         driver.get("https://twitter.com/login")
-        wait = WebDriverWait(driver, 10)
+        wait = WebDriverWait(driver, 15)
 
         # Entrer le nom d'utilisateur
         username_field = wait.until(EC.presence_of_element_located((By.NAME, "text")))
@@ -53,7 +53,7 @@ def login_to_twitter():
         driver.quit()
         raise
 
-# Fonction pour gérer les messages privés (DM)
+# Récupérer et traiter les messages privés (DM)
 def handle_direct_messages():
     try:
         driver.get("https://twitter.com/messages")
@@ -83,10 +83,10 @@ def handle_direct_messages():
 
     except TimeoutException:
         print("Erreur : impossible de charger les messages.")
-    finally:
-        driver.quit()
+    except WebDriverException as e:
+        print(f"Erreur WebDriver : {e}")
 
-# Fonction pour générer une réponse avec ChatGPT
+# Générer une réponse avec ChatGPT
 def generate_response_with_gpt(message):
     try:
         response = openai.ChatCompletion.create(
@@ -103,7 +103,7 @@ def generate_response_with_gpt(message):
         print(f"Erreur lors de la génération de la réponse : {e}")
         return "Désolé, je ne peux pas répondre pour le moment."
 
-# Fonction pour envoyer un message privé
+# Envoyer un message privé
 def send_message(response):
     try:
         message_input = driver.find_element(By.XPATH, "//div[@data-testid='dmComposerTextInput']")
@@ -113,7 +113,7 @@ def send_message(response):
     except NoSuchElementException:
         print("Erreur : impossible de trouver le champ d'entrée de message.")
 
-# Fonction pour poster un tweet
+# Poster un tweet
 def post_tweet(content):
     try:
         driver.get("https://twitter.com/compose/tweet")
@@ -133,7 +133,7 @@ def post_tweet(content):
     except NoSuchElementException:
         print("Erreur : élément du tweet non trouvé.")
 
-# Fonction pour générer un contenu de tweet avec ChatGPT
+# Générer un tweet avec ChatGPT
 def generate_tweet_content():
     try:
         response = openai.ChatCompletion.create(
@@ -152,20 +152,23 @@ def generate_tweet_content():
 
 # Lancer le bot en boucle
 if __name__ == "__main__":
-    login_to_twitter()
+    try:
+        login_to_twitter()
 
-    last_tweet_time = None
+        last_tweet_time = None
 
-    while True:
-        # Répondre aux messages privés
-        handle_direct_messages()
+        while True:
+            handle_direct_messages()
 
-        # Poster un tweet toutes les heures
-        current_time = datetime.now()
-        if last_tweet_time is None or (current_time - last_tweet_time).seconds >= 3600:
-            tweet_content = generate_tweet_content()
-            post_tweet(tweet_content)
-            last_tweet_time = current_time
+            # Poster un tweet toutes les heures
+            current_time = datetime.now()
+            if last_tweet_time is None or (current_time - last_tweet_time).seconds >= 3600:
+                tweet_content = generate_tweet_content()
+                post_tweet(tweet_content)
+                last_tweet_time = current_time
 
-        # Pause de 60 secondes avant la prochaine vérification
-        time.sleep(60)
+            time.sleep(60)
+    except Exception as e:
+        print(f"Erreur fatale : {e}")
+    finally:
+        driver.quit()
