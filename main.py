@@ -14,18 +14,21 @@ import openai
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 TWITTER_PASSWORD = os.environ.get("TWITTER_PASSWORD")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-CHROME_DRIVER_PATH = os.environ.get("CHROME_DRIVER_PATH", "/usr/bin/chromedriver")
+CHROME_DRIVER_PATH = "/usr/local/bin/chromedriver"  # Chemin du ChromeDriver installé par le buildpack
+GOOGLE_CHROME_PATH = "/usr/local/bin/google-chrome"  # Chemin de Chrome installé par le buildpack
 
 # Initialisation de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
 
 # Initialisation de Selenium
 options = webdriver.ChromeOptions()
-options.add_argument("--headless")  # Pour exécution sur Heroku
+options.add_argument("--headless")  # Exécution en mode headless
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
+options.binary_location = GOOGLE_CHROME_PATH  # Chemin vers Chrome
 
+# Initialisation du driver Chrome
 driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
 
 # Connexion à Twitter
@@ -50,7 +53,7 @@ def login_to_twitter():
         driver.quit()
         raise
 
-# Récupération et traitement des messages privés (DM)
+# Gestion des messages privés (DM)
 def handle_direct_messages():
     try:
         driver.get("https://twitter.com/messages")
@@ -100,7 +103,7 @@ def generate_response_with_gpt(message):
         print(f"Erreur lors de la génération de la réponse : {e}")
         return "Désolé, je ne peux pas répondre pour le moment."
 
-# Envoi de message
+# Envoi d'un message
 def send_message(response):
     try:
         message_input = driver.find_element(By.XPATH, "//div[@data-testid='dmComposerTextInput']")
@@ -110,7 +113,7 @@ def send_message(response):
     except NoSuchElementException:
         print("Erreur : impossible de trouver le champ d'entrée de message.")
 
-# Lancement du bot
+# Lancer le bot
 if __name__ == "__main__":
     login_to_twitter()
     handle_direct_messages()
