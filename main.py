@@ -1,7 +1,6 @@
 import os
 import time
 from datetime import datetime
-import traceback
 import logging
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -71,6 +70,11 @@ def login_to_twitter():
         password_field.send_keys(Keys.RETURN)
 
         logging.info("Connexion réussie.")
+
+        # Capture d'écran après la connexion
+        driver.save_screenshot("screenshot_after_login.png")
+        logging.info("Capture d'écran après la connexion sauvegardée : screenshot_after_login.png")
+
     except TimeoutException:
         logging.error("Erreur de connexion : timeout expiré.")
         raise
@@ -83,10 +87,14 @@ def handle_direct_messages():
     try:
         logging.info("Chargement des messages privés...")
         driver.get("https://twitter.com/messages")
-        wait = WebDriverWait(driver, 30)  # Augmenter le délai d'attente
 
-        # XPath pour les conversations
-        conversations = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//div[@data-testid='conversation']")))
+        # Attendre que la page soit complètement chargée
+        time.sleep(10)  # Attente de 10 secondes pour éviter les chargements incomplets
+
+        wait = WebDriverWait(driver, 30)
+
+        # Utiliser le nouveau XPath
+        conversations = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//div[@role='listitem']")))
 
         for conversation in conversations:
             try:
@@ -105,7 +113,7 @@ def handle_direct_messages():
                 continue
 
     except TimeoutException:
-        driver.save_screenshot("screenshot_error.png")
+        driver.save_screenshot("screenshot_error_messages.png")
         logging.error("Erreur : impossible de charger les messages. Capture d'écran sauvegardée.")
     except Exception as e:
         logging.error(f"Erreur lors de la gestion des messages : {e}")
