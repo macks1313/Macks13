@@ -16,8 +16,8 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler(),  # Pour les logs Heroku
-        logging.FileHandler("bot_debug.log")  # Fichier local
+        logging.StreamHandler(),
+        logging.FileHandler("bot_debug.log")
     ]
 )
 
@@ -87,13 +87,9 @@ def handle_direct_messages():
     try:
         logging.info("Chargement des messages privés...")
         driver.get("https://twitter.com/messages")
-
-        # Attendre que la page soit complètement chargée
-        time.sleep(10)  # Attente de 10 secondes pour éviter les chargements incomplets
+        time.sleep(10)  # Attendre que la page soit chargée
 
         wait = WebDriverWait(driver, 30)
-
-        # Utiliser le nouveau XPath
         conversations = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//div[@role='listitem']")))
 
         for conversation in conversations:
@@ -114,7 +110,10 @@ def handle_direct_messages():
 
     except TimeoutException:
         driver.save_screenshot("screenshot_error_messages.png")
-        logging.error("Erreur : impossible de charger les messages. Capture d'écran sauvegardée.")
+        html_content = driver.page_source
+        with open("page_source_messages.html", "w", encoding="utf-8") as file:
+            file.write(html_content)
+        logging.error("Erreur : impossible de charger les messages. Capture d'écran et HTML sauvegardés.")
     except Exception as e:
         logging.error(f"Erreur lors de la gestion des messages : {e}")
 
@@ -154,8 +153,9 @@ def post_tweet(content):
     try:
         logging.info("Publication d'un tweet...")
         driver.get("https://twitter.com/compose/tweet")
-        wait = WebDriverWait(driver, 10)
+        time.sleep(5)  # Pause pour s'assurer que la page est chargée
 
+        wait = WebDriverWait(driver, 10)
         tweet_input = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@data-testid='tweetTextarea_0']")))
         tweet_input.send_keys(content)
 
@@ -164,7 +164,11 @@ def post_tweet(content):
 
         logging.info(f"Tweet posté : {content}")
     except TimeoutException:
-        logging.error("Erreur : impossible de poster le tweet.")
+        driver.save_screenshot("screenshot_tweet_error.png")
+        html_content = driver.page_source
+        with open("page_source_tweet.html", "w", encoding="utf-8") as file:
+            file.write(html_content)
+        logging.error("Erreur : impossible de poster le tweet. Capture d'écran et HTML sauvegardés.")
     except NoSuchElementException:
         logging.error("Erreur : élément du tweet non trouvé.")
     except Exception as e:
