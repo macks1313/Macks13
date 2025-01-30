@@ -14,11 +14,11 @@ import openai
 
 # Configuration des logs
 logging.basicConfig(
-    level=logging.DEBUG,  # Niveau DEBUG pour tout enregistrer
+    level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler(),  # Affichage dans les logs Heroku
-        logging.FileHandler("bot_debug.log")  # Sauvegarde locale pour diagnostic
+        logging.StreamHandler(),  # Pour les logs Heroku
+        logging.FileHandler("bot_debug.log")  # Fichier local
     ]
 )
 
@@ -26,8 +26,8 @@ logging.basicConfig(
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 TWITTER_PASSWORD = os.environ.get("TWITTER_PASSWORD")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-CHROME_DRIVER_PATH = "/usr/local/bin/chromedriver"
-GOOGLE_CHROME_PATH = "/usr/local/bin/google-chrome"
+CHROME_DRIVER_PATH = "/app/.cache/selenium/chromedriver/linux64/114.0.5735.90/chromedriver"
+GOOGLE_CHROME_PATH = "/app/.apt/usr/bin/google-chrome"
 
 # Vérification des variables d'environnement
 if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
@@ -80,7 +80,7 @@ def login_to_twitter():
         logging.error(f"Erreur lors de la connexion à Twitter : {e}")
         raise
 
-# Gestion des messages privés
+# Gestion des messages privés (DM)
 def handle_direct_messages():
     try:
         logging.info("Chargement des messages privés...")
@@ -128,7 +128,7 @@ def generate_response_with_gpt(message):
         logging.error(f"Erreur lors de la génération de la réponse : {e}")
         return "Désolé, je ne peux pas répondre pour le moment."
 
-# Envoi d'un message
+# Envoi d'un message privé
 def send_message(response):
     try:
         logging.info(f"Envoi de la réponse : {response}")
@@ -161,6 +161,24 @@ def post_tweet(content):
         logging.error("Erreur : élément du tweet non trouvé.")
     except Exception as e:
         logging.error(f"Erreur lors de la publication du tweet : {e}")
+
+# Génération de contenu de tweet avec ChatGPT
+def generate_tweet_content():
+    try:
+        logging.info("Génération du contenu du tweet avec ChatGPT...")
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Tu es un bot Twitter spécialisé dans les tweets drôles et motivants sur le développement personnel."},
+                {"role": "user", "content": "Donne-moi un tweet drôle et motivant."}
+            ],
+            max_tokens=50,
+            temperature=0.8
+        )
+        return response['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        logging.error(f"Erreur lors de la génération du tweet : {e}")
+        return "Une petite dose de motivation... ou pas !"
 
 # Lancement du bot
 if __name__ == "__main__":
