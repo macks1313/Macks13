@@ -1,6 +1,7 @@
 import os
 import time
 import random
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -14,8 +15,8 @@ import openai
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 TWITTER_PASSWORD = os.environ.get("TWITTER_PASSWORD")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-CHROME_DRIVER_PATH = "/usr/local/bin/chromedriver"  # Chemin du ChromeDriver installé par le buildpack
-GOOGLE_CHROME_PATH = "/usr/local/bin/google-chrome"  # Chemin de Chrome installé par le buildpack
+CHROME_DRIVER_PATH = "/usr/local/bin/chromedriver"  # Chemin du ChromeDriver installé
+GOOGLE_CHROME_PATH = "/usr/local/bin/google-chrome"  # Chemin de Chrome installé
 
 # Initialisation de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
@@ -28,7 +29,6 @@ options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.binary_location = GOOGLE_CHROME_PATH  # Chemin vers Chrome
 
-# Initialisation du driver Chrome
 driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
 
 # Connexion à Twitter
@@ -53,7 +53,7 @@ def login_to_twitter():
         driver.quit()
         raise
 
-# Gestion des messages privés (DM)
+# Fonction pour gérer les messages privés (DM)
 def handle_direct_messages():
     try:
         driver.get("https://twitter.com/messages")
@@ -65,7 +65,7 @@ def handle_direct_messages():
         for conversation in conversations:
             try:
                 conversation.click()
-                time.sleep(3)
+                time.sleep(2)
 
                 # Lire le dernier message
                 messages = driver.find_elements(By.XPATH, "//div[@data-testid='messageEntry']")
@@ -86,7 +86,7 @@ def handle_direct_messages():
     finally:
         driver.quit()
 
-# Génération de réponse avec ChatGPT
+# Fonction pour générer une réponse avec ChatGPT
 def generate_response_with_gpt(message):
     try:
         response = openai.ChatCompletion.create(
@@ -103,7 +103,7 @@ def generate_response_with_gpt(message):
         print(f"Erreur lors de la génération de la réponse : {e}")
         return "Désolé, je ne peux pas répondre pour le moment."
 
-# Envoi d'un message
+# Fonction pour envoyer un message privé
 def send_message(response):
     try:
         message_input = driver.find_element(By.XPATH, "//div[@data-testid='dmComposerTextInput']")
@@ -113,7 +113,59 @@ def send_message(response):
     except NoSuchElementException:
         print("Erreur : impossible de trouver le champ d'entrée de message.")
 
-# Lancer le bot
+# Fonction pour poster un tweet
+def post_tweet(content):
+    try:
+        driver.get("https://twitter.com/compose/tweet")
+        wait = WebDriverWait(driver, 10)
+
+        # Saisir le contenu du tweet
+        tweet_input = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@data-testid='tweetTextarea_0']")))
+        tweet_input.send_keys(content)
+
+        # Envoyer le tweet
+        tweet_button = driver.find_element(By.XPATH, "//div[@data-testid='tweetButtonInline']")
+        tweet_button.click()
+
+        print(f"Tweet posté : {content}")
+    except TimeoutException:
+        print("Erreur : impossible de poster le tweet.")
+    except NoSuchElementException:
+        print("Erreur : élément du tweet non trouvé.")
+
+# Fonction pour générer un contenu de tweet avec ChatGPT
+def generate_tweet_content():
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Tu es un bot Twitter spécialisé dans les tweets drôles et motivants sur le développement personnel."},
+                {"role": "user", "content": "Donne-moi un tweet drôle et motivant."}
+            ],
+            max_tokens=50,
+            temperature=0.8
+        )
+        return response['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        print(f"Erreur lors de la génération du tweet : {e}")
+        return "Une petite dose de motivation... ou pas !"
+
+# Lancer le bot en boucle
 if __name__ == "__main__":
     login_to_twitter()
-    handle_direct_messages()
+
+    last_tweet_time = None
+
+    while True:
+        # Répondre aux messages privés
+        handle_direct_messages()
+
+        # Poster un tweet toutes les heures
+        current_time = datetime.now()
+        if last_tweet_time is None or (current_time - last_tweet_time).seconds >= 3600:
+            tweet_content = generate_tweet_content()
+            post_tweet(tweet_content)
+            last_tweet_time = current_time
+
+        # Pause de 60 secondes avant la prochaine vérification
+        time.sleep(60)
