@@ -26,8 +26,8 @@ logging.basicConfig(
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
 TWITTER_PASSWORD = os.environ.get("TWITTER_PASSWORD")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-CHROME_DRIVER_PATH = "/app/.cache/selenium/chromedriver/linux64/114.0.5735.90/chromedriver"
-GOOGLE_CHROME_PATH = "/app/.apt/usr/bin/google-chrome"
+CHROME_DRIVER_PATH = "/app/.chrome-for-testing/chromedriver-linux64/chromedriver"
+GOOGLE_CHROME_PATH = "/app/.chrome-for-testing/chrome-linux64/chrome"
 
 # Vérification des variables d'environnement
 if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
@@ -43,12 +43,10 @@ options.add_argument("--headless")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-background-timer-throttling")
-options.add_argument("--disable-backgrounding-occluded-windows")
-options.add_argument("--disable-renderer-backgrounding")
 options.binary_location = GOOGLE_CHROME_PATH
 
 try:
+    logging.info(f"Initialisation de Selenium avec ChromeDriver : {CHROME_DRIVER_PATH} et Chrome : {GOOGLE_CHROME_PATH}")
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
     logging.info("Initialisation du driver Selenium réussie.")
 except WebDriverException as e:
@@ -161,24 +159,6 @@ def post_tweet(content):
         logging.error("Erreur : élément du tweet non trouvé.")
     except Exception as e:
         logging.error(f"Erreur lors de la publication du tweet : {e}")
-
-# Génération de contenu de tweet avec ChatGPT
-def generate_tweet_content():
-    try:
-        logging.info("Génération du contenu du tweet avec ChatGPT...")
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Tu es un bot Twitter spécialisé dans les tweets drôles et motivants sur le développement personnel."},
-                {"role": "user", "content": "Donne-moi un tweet drôle et motivant."}
-            ],
-            max_tokens=50,
-            temperature=0.8
-        )
-        return response['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        logging.error(f"Erreur lors de la génération du tweet : {e}")
-        return "Une petite dose de motivation... ou pas !"
 
 # Lancement du bot
 if __name__ == "__main__":
