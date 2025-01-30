@@ -9,6 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 import openai
+import traceback
 
 # Configuration des variables d'environnement
 TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
@@ -35,6 +36,7 @@ options.add_argument("--disable-backgrounding-occluded-windows")
 options.add_argument("--disable-renderer-backgrounding")
 options.binary_location = GOOGLE_CHROME_PATH
 
+# Initialisation du driver Selenium
 try:
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
 except WebDriverException as e:
@@ -63,7 +65,7 @@ def login_to_twitter():
     except Exception as e:
         raise Exception(f"Erreur lors de la connexion à Twitter : {e}")
 
-# Fonction pour gérer les messages privés (DM)
+# Gestion des messages privés (DM)
 def handle_direct_messages():
     try:
         print("Chargement des messages privés...")
@@ -97,7 +99,7 @@ def handle_direct_messages():
     except Exception as e:
         print(f"Erreur lors de la gestion des messages : {e}")
 
-# Fonction pour générer une réponse avec ChatGPT
+# Génération de réponse avec ChatGPT
 def generate_response_with_gpt(message):
     try:
         print("Génération de la réponse avec ChatGPT...")
@@ -115,7 +117,7 @@ def generate_response_with_gpt(message):
         print(f"Erreur lors de la génération de la réponse : {e}")
         return "Désolé, je ne peux pas répondre pour le moment."
 
-# Fonction pour envoyer un message privé
+# Envoi d'un message privé
 def send_message(response):
     try:
         print(f"Envoi de la réponse : {response}")
@@ -125,8 +127,10 @@ def send_message(response):
         print("Réponse envoyée.")
     except NoSuchElementException:
         print("Erreur : impossible de trouver le champ d'entrée de message.")
+    except Exception as e:
+        print(f"Erreur lors de l'envoi du message : {e}")
 
-# Fonction pour poster un tweet
+# Publication d'un tweet
 def post_tweet(content):
     try:
         print("Publication d'un tweet...")
@@ -149,7 +153,7 @@ def post_tweet(content):
     except Exception as e:
         print(f"Erreur lors de la publication du tweet : {e}")
 
-# Fonction pour générer un contenu de tweet avec ChatGPT
+# Génération de contenu de tweet avec ChatGPT
 def generate_tweet_content():
     try:
         print("Génération du contenu du tweet avec ChatGPT...")
@@ -167,7 +171,7 @@ def generate_tweet_content():
         print(f"Erreur lors de la génération du tweet : {e}")
         return "Une petite dose de motivation... ou pas !"
 
-# Lancer le bot en boucle
+# Lancement du bot en boucle
 if __name__ == "__main__":
     try:
         print("Lancement du bot...")
@@ -187,5 +191,6 @@ if __name__ == "__main__":
 
             time.sleep(60)
     except Exception as e:
-        print(f"Erreur fatale : {e}")
+        print("Erreur fatale détectée !")
+        print(traceback.format_exc())  # Affiche le traceback complet de l'erreur
         driver.quit()
