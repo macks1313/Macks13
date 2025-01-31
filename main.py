@@ -13,26 +13,26 @@ from selenium.webdriver.chrome.options import Options
 ###############################################################################
 # 1. Variables d'environnement
 ###############################################################################
-TWITTER_USERNAME = os.environ["TWITTER_USERNAME"]
-TWITTER_PASSWORD = os.environ["TWITTER_PASSWORD"]
-OPENAI_API_KEY   = os.environ["OPENAI_API_KEY"]
+TWITTER_USERNAME = os.environ["TWITTER_USERNAME"]  # Identifiant Twitter
+TWITTER_PASSWORD = os.environ["TWITTER_PASSWORD"]  # Mot de passe Twitter
+OPENAI_API_KEY   = os.environ["OPENAI_API_KEY"]   # Clé OpenAI
 
-# Configuration de la clé OpenAI
+# Configuration de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
 
 ###############################################################################
 # 2. Configuration du Logger
 ###############################################################################
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.INFO,  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
 ###############################################################################
-# 3. Configuration Selenium
+# 3. Configuration de Selenium
 ###############################################################################
 chrome_options = Options()
-chrome_options.add_argument("--headless")       # Mode sans interface graphique
+chrome_options.add_argument("--headless")             # Mode sans UI
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("user-agent=MySarcasticBot/1.0")
@@ -40,175 +40,174 @@ chrome_options.add_argument("user-agent=MySarcasticBot/1.0")
 driver = webdriver.Chrome(options=chrome_options)
 
 ###############################################################################
-# 4. Fonctions pour l’API OpenAI (ChatGPT)
+# 4. Fonctions d'appel à OpenAI (ChatGPT)
 ###############################################################################
 def generate_sarcastic_response(message: str) -> str:
     """
-    Génère une réponse sarcastique et humoristique via ChatGPT (GPT-3.5-turbo),
-    dans un style 'coach de développement personnel' un peu piquant.
+    Utilise ChatGPT (GPT-3.5-turbo) pour générer une réponse sarcastique en français.
     """
+    logging.info("Début de generate_sarcastic_response()")
     try:
         prompt = (
-            "Tu es un coach sarcastique, moqueur et humoristique, "
-            "qui donne des conseils de développement personnel de façon piquante. "
-            f"Voici le message reçu : {message}\n"
-            "Réponds en français, avec un ton sarcastique et un peu moqueur, "
-            "en une ou deux phrases maximum."
+            "Tu es un coach sarcastique et moqueur, qui donne des conseils de développement "
+            "personnel de façon piquante. Message reçu : \n"
+            f"{message}\n\n"
+            "Donne une réponse brève (1-2 phrases), en français, sarcastique."
         )
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=60,
-            temperature=0.8
+            temperature=0.7
         )
-        return response.choices[0].message.content.strip()
+        text = response.choices[0].message.content.strip()
+        logging.info(f"Réponse ChatGPT DM : {text}")
+        return text
     except Exception as e:
-        logging.error(f"Erreur OpenAI (réponse DM) : {e}")
-        # Réponse par défaut si OpenAI échoue
-        return "Je suis trop sarcastique pour te répondre…"
+        logging.error(f"Erreur OpenAI (DM) : {e}")
+        return "Désolé, je suis trop sarcastique pour te répondre..."
 
 def generate_sarcastic_tweet() -> str:
     """
-    Génère un tweet sarcastique et humoristique via ChatGPT (GPT-3.5-turbo).
+    Utilise ChatGPT (GPT-3.5-turbo) pour générer un tweet sarcastique et humoristique, en français.
     """
+    logging.info("Début de generate_sarcastic_tweet()")
     try:
         prompt = (
             "Génère un tweet humoristique et sarcastique en français, "
-            "avec une touche de développement personnel. "
-            "Une ou deux phrases maximum, cinglantes mais fun."
+            "avec une petite touche de développement personnel. Maximum 1-2 phrases."
         )
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=50,
-            temperature=0.8
+            max_tokens=60,
+            temperature=0.7
         )
-        return response.choices[0].message.content.strip()
+        text = response.choices[0].message.content.strip()
+        logging.info(f"Tweet généré par ChatGPT : {text}")
+        return text
     except Exception as e:
-        logging.error(f"Erreur OpenAI (génération de tweet): {e}")
+        logging.error(f"Erreur OpenAI (tweet) : {e}")
         return "Je suis tellement sarcastique que même ChatGPT est à court d'idées..."
 
 ###############################################################################
 # 5. Fonctions Selenium pour Twitter
 ###############################################################################
 def login_twitter():
-    """Se connecte à Twitter via Selenium."""
-    logging.info("Connexion à Twitter...")
+    """Se connecte à Twitter avec Selenium."""
+    logging.info("Début de login_twitter() : Connexion à Twitter...")
     try:
         driver.get("https://twitter.com/login")
 
         # Saisie identifiant
-        WebDriverWait(driver, 20).until(
+        username_field = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.NAME, "text"))
-        ).send_keys(TWITTER_USERNAME)
-
+        )
+        username_field.send_keys(TWITTER_USERNAME)
         driver.find_element(By.XPATH, '//span[text()="Suivant"]').click()
 
         # Saisie mot de passe
-        WebDriverWait(driver, 20).until(
+        password_field = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.NAME, "password"))
-        ).send_keys(TWITTER_PASSWORD)
-
+        )
+        password_field.send_keys(TWITTER_PASSWORD)
         driver.find_element(By.XPATH, '//span[text()="Se connecter"]').click()
 
-        # Attente d'arrivée sur la page d'accueil
+        # Attendre la page d'accueil
         WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
-        logging.info("Connexion réussie.")
+        logging.info("Connexion à Twitter réussie.")
     except Exception as e:
-        logging.error(f"Erreur de connexion : {e}")
-
-def check_and_respond_DMs():
-    """Va lire les DM et répondre de façon sarcastique (générée par ChatGPT)."""
-    logging.info("Vérification des DM...")
-    try:
-        # Aller dans la section Messages
-        driver.get("https://twitter.com/messages")
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-
-        # Récupérer les conversations DM
-        conversations = driver.find_elements(By.CSS_SELECTOR, '[data-testid="conversation"]')
-        if not conversations:
-            logging.info("Aucune conversation DM trouvée.")
-            return
-
-        # Traiter un certain nombre de conversations
-        for convo in conversations[:5]:
-            convo.click()
-
-            # Récupérer les messages
-            last_messages = driver.find_elements(By.CSS_SELECTOR, '[data-testid="messageEntry"]')
-            if not last_messages:
-                continue
-
-            # On prend le dernier message
-            last_msg_text = last_messages[-1].text  
-            # Générer une réponse sarcastique via ChatGPT
-            sarcastic_answer = generate_sarcastic_response(last_msg_text)
-
-            # Trouver la zone de texte pour répondre
-            msg_box = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="dmComposerTextInput"]'))
-            )
-            msg_box.send_keys(sarcastic_answer)
-
-            # Envoyer la réponse
-            send_button = driver.find_element(By.CSS_SELECTOR, '[data-testid="dmComposerSendButton"]')
-            send_button.click()
-
-        logging.info("Réponses DM envoyées.")
-
-    except Exception as e:
-        logging.error(f"Erreur pendant la vérification/réponse des DM : {e}")
+        logging.error(f"Erreur de connexion à Twitter : {e}")
 
 def post_tweet():
-    """Publie un tweet sarcastique et humoristique généré par ChatGPT."""
-    logging.info("Publication d’un tweet...")
+    """Publie un tweet sarcastique généré par ChatGPT."""
+    logging.info("Début de post_tweet()")
     try:
-        # Générer le texte via ChatGPT
         tweet_text = generate_sarcastic_tweet()
+        logging.info("Publication d’un tweet...")
 
-        # Aller sur la page de rédaction de tweet
         driver.get("https://twitter.com/compose/tweet")
-
-        # Zone de texte du tweet
         text_area = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="tweetTextarea_0"]'))
         )
         text_area.send_keys(tweet_text)
 
-        # Bouton "Tweeter"
         tweet_button = driver.find_element(By.CSS_SELECTOR, '[data-testid="tweetButtonInline"]')
         tweet_button.click()
 
         logging.info(f"Tweet publié : {tweet_text}")
-
     except Exception as e:
         logging.error(f"Erreur pendant la publication du tweet : {e}")
+
+def check_and_respond_DMs():
+    """Récupère les DM et y répond avec une réponse sarcastique générée par ChatGPT."""
+    logging.info("Début de check_and_respond_DMs() : Vérification des DM...")
+    try:
+        driver.get("https://twitter.com/messages")
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+
+        conversations = driver.find_elements(By.CSS_SELECTOR, '[data-testid="conversation"]')
+        if not conversations:
+            logging.info("Aucune conversation DM trouvée.")
+            return
+
+        logging.info(f"{len(conversations)} conversation(s) DM trouvée(s).")
+
+        # Limiter le traitement à quelques conversations pour l'exemple
+        for convo in conversations[:5]:
+            convo.click()
+
+            last_messages = driver.find_elements(By.CSS_SELECTOR, '[data-testid="messageEntry"]')
+            if not last_messages:
+                logging.info("Pas de message dans cette conversation.")
+                continue
+
+            last_msg_text = last_messages[-1].text  
+            # Générer la réponse
+            sarcastic_answer = generate_sarcastic_response(last_msg_text)
+
+            # Saisir la réponse dans la zone de texte
+            msg_box = WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="dmComposerTextInput"]'))
+            )
+            msg_box.send_keys(sarcastic_answer)
+
+            # Envoyer
+            send_button = driver.find_element(By.CSS_SELECTOR, '[data-testid="dmComposerSendButton"]')
+            send_button.click()
+
+        logging.info("Réponses DM envoyées.")
+    except Exception as e:
+        logging.error(f"Erreur pendant la vérification/réponse DM : {e}")
 
 ###############################################################################
 # 6. Programme principal
 ###############################################################################
 def main():
-    # Étape 1 : Connexion
+    logging.info("===== DÉBUT DU SCRIPT main() =====")
+
+    # 1. Connexion
     login_twitter()
 
-    # Étape 2 : Tweeter immédiatement au démarrage (ChatGPT génère le contenu)
+    # 2. Tweeter immédiatement (pour être sûr de voir dans les logs s'il passe)
     post_tweet()
 
-    # Étape 3 : Vérifier et répondre aux DM tout de suite
+    # 3. Vérifier/répondre aux DM
     check_and_respond_DMs()
 
-    # Étape 4 : Programmer les tâches récurrentes
-    # - Un tweet toutes les 2 heures
+    # 4. Programmer les tâches récurrentes
+    # Tweeter toutes les 2 heures
     schedule.every(2).hours.do(post_tweet)
-    # - Vérifier les DM toutes les 10 minutes
+    # Vérifier/répondre aux DM toutes les 10 minutes
     schedule.every(10).minutes.do(check_and_respond_DMs)
 
-    # Étape 5 : Boucle continue
+    logging.info("Boucle infinie de planification démarrée (schedule).")
+
+    # 5. Boucle continue
     while True:
         schedule.run_pending()
         time.sleep(1)
@@ -217,7 +216,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        logging.critical(f"Erreur critique, redémarrage: {e}")
+        logging.critical(f"Erreur critique dans main(): {e}")
         driver.quit()
         time.sleep(5)
+        # Relance le script s'il y a un plantage
         main()
