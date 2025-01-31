@@ -50,6 +50,8 @@ options.add_argument("--disable-software-rasterizer")
 options.add_argument("--remote-debugging-port=9222")
 options.binary_location = GOOGLE_CHROME_PATH
 
+# Initialisation du driver Selenium
+driver = None
 try:
     logging.info("Initialisation de Selenium...")
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
@@ -124,10 +126,14 @@ def post_tweet(content):
 def main():
     login_to_twitter()
     while True:
-        tweet_content = generate_tweet_content()
-        post_tweet(tweet_content)
-        logging.info("Pause d'une heure avant la prochaine publication.")
-        time.sleep(3600)  # Pause de 1 heure
+        try:
+            tweet_content = generate_tweet_content()
+            post_tweet(tweet_content)
+            logging.info("Pause d'une heure avant la prochaine publication.")
+            time.sleep(3600)  # Pause de 1 heure
+        except Exception as e:
+            logging.error(f"Erreur dans la boucle principale : {e}")
+            time.sleep(300)  # Réessayer après 5 minutes en cas d'erreur
 
 if __name__ == "__main__":
     try:
@@ -135,4 +141,5 @@ if __name__ == "__main__":
     except Exception as e:
         logging.critical(f"Erreur critique : {e}")
     finally:
-        driver.quit()
+        if driver:
+            driver.quit()
