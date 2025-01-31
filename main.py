@@ -9,7 +9,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 import openai
-import shutil
 
 # Configuration des logs
 logging.basicConfig(
@@ -28,10 +27,6 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 CHROME_DRIVER_PATH = "/app/.chrome-for-testing/chromedriver-linux64/chromedriver"
 GOOGLE_CHROME_PATH = "/app/.chrome-for-testing/chrome-linux64/chrome"
 
-# Vérification des chemins
-logging.info(f"Vérification du chemin ChromeDriver : {shutil.which('chromedriver')}")
-logging.info(f"Vérification du chemin Google Chrome : {shutil.which('google-chrome')}")
-
 # Vérification des variables d'environnement
 if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
     logging.critical("Les variables d'environnement TWITTER_USERNAME, TWITTER_PASSWORD ou OPENAI_API_KEY sont manquantes.")
@@ -46,12 +41,8 @@ options.add_argument("--headless")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-software-rasterizer")
-options.add_argument("--remote-debugging-port=9222")
 options.binary_location = GOOGLE_CHROME_PATH
 
-# Initialisation du driver Selenium
-driver = None
 try:
     logging.info("Initialisation de Selenium...")
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
@@ -77,7 +68,6 @@ def login_to_twitter():
 
         logging.info("Connexion réussie.")
         driver.save_screenshot("screenshot_after_login.png")
-        logging.info("Capture d'écran après connexion sauvegardée.")
     except TimeoutException:
         logging.error("Erreur de connexion : délai expiré.")
         raise
@@ -124,22 +114,23 @@ def post_tweet(content):
 
 # Fonction principale
 def main():
-    login_to_twitter()
-    while True:
-        try:
+    try:
+        login_to_twitter()
+        while True:
             tweet_content = generate_tweet_content()
             post_tweet(tweet_content)
             logging.info("Pause d'une heure avant la prochaine publication.")
             time.sleep(3600)  # Pause de 1 heure
-        except Exception as e:
-            logging.error(f"Erreur dans la boucle principale : {e}")
-            time.sleep(300)  # Réessayer après 5 minutes en cas d'erreur
-
-if __name__ == "__main__":
-    try:
-        main()
     except Exception as e:
         logging.critical(f"Erreur critique : {e}")
     finally:
-        if driver:
-            driver.quit()
+        logging.info("Le script continue pour éviter que le processus ne s'arrête.")
+        time.sleep(60)  # Pause de 1 minute avant de réessayer
+
+if __name__ == "__main__":
+    while True:
+        try:
+            main()
+        except Exception as main_error:
+            logging.error(f"Redémarrage après une erreur dans la boucle principale : {main_error}")
+            time.sleep(300)  # Attente de 5 minutes avant de redémarrer
