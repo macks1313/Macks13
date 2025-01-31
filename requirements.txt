@@ -1,2 +1,4 @@
-selenium==4.10.0
-openai==0.27.0
+selenium
+schedule
+requests
+openai
