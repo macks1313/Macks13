@@ -1,144 +1,210 @@
 import os
 import time
 import logging
+import schedule
+import openai
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
-import openai
-import shutil
+from selenium.webdriver.chrome.options import Options
 
-# Configuration des logs
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("bot_debug.log")
-    ]
-)
+###############################################################################
+# 1. Variables d'environnement
+###############################################################################
+TWITTER_USERNAME = os.environ["TWITTER_USERNAME"]
+TWITTER_PASSWORD = os.environ["TWITTER_PASSWORD"]
+OPENAI_API_KEY   = os.environ["OPENAI_API_KEY"]  # Clé OpenAI stockée sur Heroku
 
-# Variables d'environnement
-TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
-TWITTER_PASSWORD = os.environ.get("TWITTER_PASSWORD")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-CHROME_DRIVER_PATH = "/app/.chrome-for-testing/chromedriver-linux64/chromedriver"
-GOOGLE_CHROME_PATH = "/app/.chrome-for-testing/chrome-linux64/chrome"
-
-# Vérification des chemins
-logging.info(f"Vérification du chemin ChromeDriver : {shutil.which('chromedriver')}")
-logging.info(f"Vérification du chemin Google Chrome : {shutil.which('google-chrome')}")
-
-# Vérification des variables d'environnement
-if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
-    logging.critical("Les variables d'environnement TWITTER_USERNAME, TWITTER_PASSWORD ou OPENAI_API_KEY sont manquantes.")
-    raise Exception("Les variables d'environnement manquent.")
-
-# Initialisation de l'API OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Configuration de Selenium
-options = webdriver.ChromeOptions()
-options.add_argument("--headless")
-options.add_argument("--disable-gpu")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-software-rasterizer")
-options.add_argument("--remote-debugging-port=9222")
-options.binary_location = GOOGLE_CHROME_PATH
+###############################################################################
+# 2. Configuration du Logger
+###############################################################################
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
-try:
-    logging.info("Initialisation de Selenium...")
-    driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
-    logging.info("Initialisation du driver Selenium réussie.")
-except WebDriverException as e:
-    logging.critical(f"Erreur lors de l'initialisation de Selenium : {e}")
-    raise
+###############################################################################
+# 3. Configuration Selenium
+###############################################################################
+chrome_options = Options()
+chrome_options.add_argument("--headless")       # Mode sans interface graphique
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument(
+    "user-agent=MySarcasticBot/1.0"
+)
 
-# Connexion à Twitter
-def login_to_twitter():
+driver = webdriver.Chrome(options=chrome_options)
+
+###############################################################################
+# 4. Fonctions pour l’API OpenAI
+###############################################################################
+def generate_sarcastic_response(message: str) -> str:
+    """
+    Utilise l’API OpenAI pour générer une réponse courte, 
+    sarcastique et humoristique sur le thème du développement personnel.
+    """
     try:
-        logging.info("Connexion à Twitter...")
-        driver.get("https://twitter.com/login")
-        wait = WebDriverWait(driver, 60)
+        prompt = (
+            "Tu es un coach sarcastique et humoristique, "
+            "qui donne des conseils de développement personnel de manière piquante. "
+            f"Voici le message reçu : {message}\n"
+            "Réponds avec une phrase ou deux, en français, de manière sarcastique."
+        )
 
-        logging.info("Recherche du champ de nom d'utilisateur...")
-        username_field = wait.until(EC.presence_of_element_located((By.NAME, "text")))
-        username_field.send_keys(TWITTER_USERNAME)
-        username_field.send_keys(Keys.RETURN)
-
-        logging.info("Recherche du champ de mot de passe...")
-        password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
-        password_field.send_keys(TWITTER_PASSWORD)
-        password_field.send_keys(Keys.RETURN)
-
-        logging.info("Connexion réussie.")
-        driver.save_screenshot("screenshot_after_login.png")
-    except TimeoutException:
-        logging.error("Erreur de connexion : délai expiré.")
-        driver.save_screenshot("screenshot_timeout_error.png")
-        raise
-    except Exception as e:
-        logging.error(f"Erreur lors de la connexion à Twitter : {e}")
-        driver.save_screenshot("screenshot_login_error.png")
-        raise
-
-# Génération de contenu avec GPT
-def generate_tweet_content():
-    try:
-        logging.info("Génération du contenu du tweet avec ChatGPT...")
+        # Pour GPT-3.5-turbo
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Tu es un bot créatif et drôle. Crée un tweet intéressant ou motivant."},
-                {"role": "user", "content": "Génère un tweet pour aujourd'hui."}
-            ],
-            max_tokens=100,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=60,
             temperature=0.7
         )
-        return response['choices'][0]['message']['content'].strip()
+
+        # Extraction du texte de la réponse
+        answer = response.choices[0].message.content.strip()
+        return answer
+
     except Exception as e:
-        logging.error(f"Erreur lors de la génération de contenu : {e}")
-        return "Je suis en panne d'inspiration aujourd'hui, mais restez motivé !"
+        logging.error(f"Erreur OpenAI: {e}")
+        # Réponse de secours en cas de panne OpenAI
+        return "Désolé, je suis trop sarcastique pour répondre…"
 
-# Publication d'un tweet
-def post_tweet(content):
+def generate_sarcastic_tweet() -> str:
+    """
+    Génère un court tweet sarcastique via OpenAI.
+    """
     try:
-        logging.info("Publication du tweet...")
+        prompt = (
+            "Génère un tweet humoristique et sarcastique en français, "
+            "avec une petite touche de développement personnel."
+        )
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=50,
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logging.error(f"Erreur OpenAI (génération de tweet): {e}")
+        return "Je suis tellement sarcastique que même OpenAI est à court d'idées..."
+
+###############################################################################
+# 5. Fonctions principales Selenium
+###############################################################################
+def login_twitter():
+    """Connexion à Twitter via Selenium."""
+    logging.info("Connexion en cours...")
+    try:
+        driver.get("https://twitter.com/login")
+
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.NAME, "text"))
+        ).send_keys(TWITTER_USERNAME)
+
+        driver.find_element(By.XPATH, '//span[text()="Suivant"]').click()
+
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.NAME, "password"))
+        ).send_keys(TWITTER_PASSWORD)
+
+        driver.find_element(By.XPATH, '//span[text()="Se connecter"]').click()
+
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+        logging.info("Connexion réussie.")
+    except Exception as e:
+        logging.error(f"Erreur de connexion: {e}")
+
+def check_and_respond_DMs():
+    """Récupère les DM non lus et y répond de façon sarcastique via OpenAI."""
+    logging.info("Vérification des DM...")
+    try:
+        driver.get("https://twitter.com/messages")
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+
+        # Exemple simplifié : on identifie les conversations
+        conversations = driver.find_elements(By.CSS_SELECTOR, '[data-testid="conversation"]')
+
+        # Pour chaque conversation, on ouvre et répond
+        for convo in conversations[:3]:  # Limiter le nombre de DM traités
+            convo.click()
+
+            # Récupère le dernier message
+            last_messages = driver.find_elements(By.CSS_SELECTOR, '[data-testid="messageEntry"]')
+            if not last_messages:
+                continue
+
+            last_msg_text = last_messages[-1].text  
+            # Générez la réponse sarcastique via OpenAI
+            sarcastic_answer = generate_sarcastic_response(last_msg_text)
+
+            # Envoyer la réponse
+            msg_box = WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="dmComposerTextInput"]'))
+            )
+            msg_box.send_keys(sarcastic_answer)
+
+            send_button = driver.find_element(By.CSS_SELECTOR, '[data-testid="dmComposerSendButton"]')
+            send_button.click()
+
+        logging.info("Réponses DM envoyées.")
+
+    except Exception as e:
+        logging.error(f"Erreur pendant la vérification/réponse des DM: {e}")
+
+def post_tweet():
+    """Publie un tweet sarcastique et humoristique (généré via OpenAI)."""
+    logging.info("Publication d’un tweet...")
+    try:
+        # Génération d’un tweet via OpenAI
+        tweet_text = generate_sarcastic_tweet()
+
         driver.get("https://twitter.com/compose/tweet")
-        wait = WebDriverWait(driver, 60)
+        text_area = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="tweetTextarea_0"]'))
+        )
+        text_area.send_keys(tweet_text)
 
-        tweet_field = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@data-testid='tweetTextarea_0']")))
-        tweet_field.send_keys(content)
-
-        tweet_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@data-testid='tweetButton']")))
+        tweet_button = driver.find_element(By.CSS_SELECTOR, '[data-testid="tweetButtonInline"]')
         tweet_button.click()
 
-        logging.info("Tweet publié avec succès.")
-        driver.save_screenshot("screenshot_after_tweet.png")
-    except TimeoutException:
-        logging.error("Erreur : délai expiré lors de la publication du tweet.")
-        driver.save_screenshot("screenshot_tweet_error.png")
-    except Exception as e:
-        logging.error(f"Erreur lors de la publication du tweet : {e}")
-        driver.save_screenshot("screenshot_post_tweet_error.png")
+        logging.info(f"Tweet publié : {tweet_text}")
 
-# Fonction principale
+    except Exception as e:
+        logging.error(f"Erreur pendant la publication du tweet: {e}")
+
+###############################################################################
+# 6. Programme principal
+###############################################################################
 def main():
-    login_to_twitter()
+    # 1. Connexion
+    login_twitter()
+
+    # 2. Premier check DM
+    check_and_respond_DMs()
+
+    # 3. Planification
+    schedule.every().hour.do(post_tweet)           # Tweet toutes les heures
+    schedule.every(10).minutes.do(check_and_respond_DMs)  # Check DM régulièrement
+
+    # 4. Boucle continue
     while True:
-        tweet_content = generate_tweet_content()
-        post_tweet(tweet_content)
-        logging.info("Pause d'une heure avant le prochain tweet.")
-        time.sleep(3600)
+        schedule.run_pending()
+        time.sleep(1)
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        logging.critical(f"Erreur critique : {e}")
-    finally:
+        logging.critical(f"Erreur critique, redémarrage: {e}")
         driver.quit()
+        time.sleep(5)
+        main()
