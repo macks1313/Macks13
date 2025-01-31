@@ -1,163 +1,143 @@
-import os
 import time
+import random
 import logging
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, WebDriverException
-import openai
-import shutil
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import os
 
-# Configuration des logs
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("bot_debug.log")
-    ]
-)
+# Configuration du logger
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Variables d'environnement
-TWITTER_USERNAME = os.environ.get("TWITTER_USERNAME")
-TWITTER_PASSWORD = os.environ.get("TWITTER_PASSWORD")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-CHROME_DRIVER_PATH = "/app/.chrome-for-testing/chromedriver-linux64/chromedriver"
-GOOGLE_CHROME_PATH = "/app/.chrome-for-testing/chrome-linux64/chrome"
+# Fonctions utilitaires pour les délais
+def delay(min_sec=3, max_sec=7):
+    time.sleep(random.uniform(min_sec, max_sec))
 
-# Vérification des chemins
-logging.info(f"Chemin ChromeDriver : {shutil.which('chromedriver')}")
-logging.info(f"Chemin Google Chrome : {shutil.which('google-chrome')}")
-
-# Vérification des variables d'environnement
-if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
-    logging.critical("Variables d'environnement manquantes.")
-    raise Exception("Les variables d'environnement nécessaires sont absentes.")
-
-# Initialisation de l'API OpenAI
-openai.api_key = OPENAI_API_KEY
-
-# Configuration de Selenium
+# Initialisation du navigateur
 options = webdriver.ChromeOptions()
 options.add_argument("--headless")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.binary_location = GOOGLE_CHROME_PATH
+
+# Chemin du ChromeDriver
+CHROME_DRIVER_PATH = '/usr/local/bin/chromedriver'
 
 try:
-    logging.info("Initialisation de Selenium...")
     driver = webdriver.Chrome(service=Service(CHROME_DRIVER_PATH), options=options)
-    logging.info("Initialisation réussie.")
-except WebDriverException as e:
-    logging.critical(f"Erreur Selenium : {e}")
-    raise
+    driver.maximize_window()
+    logging.info("Navigateur lancé avec succès.")
+except Exception as e:
+    logging.critical(f"Erreur lors de l'initialisation de Selenium : {e}")
+    exit(1)
 
 # Connexion à Twitter
 def login_to_twitter():
+    logging.info("Connexion à Twitter...")
+    driver.get("https://twitter.com/login")
+    
     try:
-        logging.info("Connexion à Twitter...")
-        driver.get("https://twitter.com/login")
-        wait = WebDriverWait(driver, 30)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, 'text')))
+        username_input = driver.find_element(By.NAME, "text")
+        username_input.send_keys(os.getenv('TWITTER_USERNAME'))
+        delay()
 
-        username_field = wait.until(EC.presence_of_element_located((By.NAME, "text")))
-        username_field.send_keys(TWITTER_USERNAME)
-        username_field.send_keys(Keys.RETURN)
+        driver.find_element(By.XPATH, "//span[text()='Next']").click()
+        delay()
 
-        password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
-        password_field.send_keys(TWITTER_PASSWORD)
-        password_field.send_keys(Keys.RETURN)
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, 'password')))
+        password_input = driver.find_element(By.NAME, "password")
+        password_input.send_keys(os.getenv('TWITTER_PASSWORD'))
+        delay()
 
-        logging.info("Connexion réussie.")
-        driver.save_screenshot("screenshot_after_login.png")
+        driver.find_element(By.XPATH, "//span[text()='Log in']").click()
+        logging.info("Connexion effectuée.")
     except TimeoutException:
-        logging.error("Erreur de connexion (délai expiré).")
-        raise
-    except Exception as e:
-        logging.error(f"Erreur lors de la connexion : {e}")
-        raise
+        logging.error("Erreur de connexion : élément non trouvé.")
+        driver.quit()
+        exit(1)
 
-# Gestion des messages privés
-def handle_direct_messages():
+# Chargement des messages privés
+def load_direct_messages():
+    logging.info("Chargement des messages privés...")
     try:
-        logging.info("Chargement des messages privés...")
         driver.get("https://twitter.com/messages")
-        time.sleep(10)
+        delay(5, 10)  # Délai supplémentaire pour le chargement de la page
 
-        wait = WebDriverWait(driver, 30)
-        conversations = wait.until(EC.presence_of_all_elements_located((By.XPATH, "//div[@role='listitem']")))
-
-        for conversation in conversations:
-            try:
-                conversation.click()
-                time.sleep(2)
-
-                messages = driver.find_elements(By.XPATH, "//div[@data-testid='messageEntry']")
-                last_message = messages[-1].text if messages else "Aucun message trouvé."
-                logging.info(f"Message reçu : {last_message}")
-
-                response = generate_response_with_gpt(last_message)
-                send_message(response)
-            except Exception as e:
-                logging.error(f"Erreur lors de la lecture d'une conversation : {e}")
-                continue
-    except TimeoutException:
-        driver.save_screenshot("screenshot_error_messages.png")
-        html_content = driver.page_source
-        with open("page_source_messages.html", "w", encoding="utf-8") as file:
-            file.write(html_content)
-        logging.error("Erreur : impossible de charger les messages.")
-    except Exception as e:
-        logging.error(f"Erreur lors de la gestion des messages : {e}")
-
-# Génération de réponse avec GPT
-def generate_response_with_gpt(message):
-    try:
-        logging.info("Génération de la réponse avec ChatGPT...")
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Tu es un bot sarcastique et drôle, spécialisé dans le développement personnel."},
-                {"role": "user", "content": message}
-            ],
-            max_tokens=100,
-            temperature=0.7
+        messages = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.XPATH, "//div[@data-testid='conversation']"))
         )
-        return response['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        logging.error(f"Erreur lors de la génération de réponse : {e}")
-        return "Désolé, je suis à court d'idées..."
+        logging.info(f"{len(messages)} conversations trouvées.")
+        return messages
+    except TimeoutException:
+        logging.error("Erreur : impossible de charger les messages.")
+        return []
 
-# Envoi de message
-def send_message(message):
-    try:
-        logging.info(f"Envoi du message : {message}")
-        message_field = driver.find_element(By.XPATH, "//div[@data-testid='dmComposerTextInput']")
-        message_field.send_keys(message)
-        message_field.send_keys(Keys.RETURN)
-        logging.info("Message envoyé avec succès.")
-    except Exception as e:
-        logging.error(f"Erreur lors de l'envoi du message : {e}")
+# Réponse automatique aux messages
+def respond_to_messages(messages):
+    for message in messages:
+        try:
+            message.click()
+            delay(3, 5)
 
-# Fonction principale avec boucle infinie
+            last_message = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//div[@data-testid='messageEntry']"))
+            ).text
+
+            response = generate_response(last_message)
+            input_box = driver.find_element(By.XPATH, "//div[@data-testid='dmComposerTextInput']")
+            input_box.send_keys(response)
+            delay()
+
+            driver.find_element(By.XPATH, "//div[@data-testid='dmComposerSendButton']").click()
+            logging.info(f"Réponse envoyée : {response}")
+
+        except Exception as e:
+            logging.error(f"Erreur lors de la réponse au message : {e}")
+
+# Génération de la réponse (exemple simplifié)
+def generate_response(message_text):
+    return "Merci pour votre message ! Ceci est une réponse automatique."
+
+# Fonction principale
 def main():
     login_to_twitter()
-    while True:
-        try:
-            handle_direct_messages()
-            logging.info("Pause de 60 secondes avant la prochaine vérification.")
-            time.sleep(60)
-        except Exception as e:
-            logging.error(f"Erreur dans la boucle principale : {e}")
-            time.sleep(10)  # Pause avant de réessayer pour éviter un crash immédiat
+    messages = load_direct_messages()
+    if messages:
+        respond_to_messages(messages)
+    else:
+        logging.info("Aucun message à traiter.")
 
-if __name__ == "__main__":
+    # Planification du prochain cycle
+    logging.info("Pause de 60 secondes avant la prochaine vérification.")
+    delay(60, 120)  # Pause d'une à deux minutes
+
+    # Exemple de tweet automatisé (chaque heure)
+    post_tweet("Ceci est un tweet automatique !")
+
+# Publication d'un tweet
+def post_tweet(content):
+    logging.info("Publication d'un tweet...")
     try:
-        main()
-    except Exception as e:
-        logging.critical(f"Erreur critique : {e}")
-    finally:
-        driver.quit()
+        driver.get("https://twitter.com/compose/tweet")
+        delay(5, 10)
+
+        tweet_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//div[@aria-label='Tweet text']"))
+        )
+        tweet_input.send_keys(content)
+        delay()
+
+        driver.find_element(By.XPATH, "//div[@data-testid='tweetButtonInline']").click()
+        logging.info("Tweet publié avec succès.")
+    except TimeoutException:
+        logging.error("Erreur : impossible de poster le tweet.")
+
+# Exécution du script principal
+if __name__ == "__main__":
+    main()
+    driver.quit()
