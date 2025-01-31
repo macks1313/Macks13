@@ -9,6 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 import openai
+import shutil
 
 # Configuration des logs
 logging.basicConfig(
@@ -27,6 +28,10 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 CHROME_DRIVER_PATH = "/app/.chrome-for-testing/chromedriver-linux64/chromedriver"
 GOOGLE_CHROME_PATH = "/app/.chrome-for-testing/chrome-linux64/chrome"
 
+# Vérification des chemins
+logging.info(f"Vérification du chemin ChromeDriver : {shutil.which('chromedriver')}")
+logging.info(f"Vérification du chemin Google Chrome : {shutil.which('google-chrome')}")
+
 # Vérification des variables d'environnement
 if not TWITTER_USERNAME or not TWITTER_PASSWORD or not OPENAI_API_KEY:
     logging.critical("Les variables d'environnement TWITTER_USERNAME, TWITTER_PASSWORD ou OPENAI_API_KEY sont manquantes.")
@@ -41,6 +46,8 @@ options.add_argument("--headless")
 options.add_argument("--disable-gpu")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-software-rasterizer")
+options.add_argument("--remote-debugging-port=9222")
 options.binary_location = GOOGLE_CHROME_PATH
 
 try:
@@ -56,12 +63,14 @@ def login_to_twitter():
     try:
         logging.info("Connexion à Twitter...")
         driver.get("https://twitter.com/login")
-        wait = WebDriverWait(driver, 30)
+        wait = WebDriverWait(driver, 60)
 
+        logging.info("Recherche du champ de nom d'utilisateur...")
         username_field = wait.until(EC.presence_of_element_located((By.NAME, "text")))
         username_field.send_keys(TWITTER_USERNAME)
         username_field.send_keys(Keys.RETURN)
 
+        logging.info("Recherche du champ de mot de passe...")
         password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
         password_field.send_keys(TWITTER_PASSWORD)
         password_field.send_keys(Keys.RETURN)
@@ -70,67 +79,66 @@ def login_to_twitter():
         driver.save_screenshot("screenshot_after_login.png")
     except TimeoutException:
         logging.error("Erreur de connexion : délai expiré.")
+        driver.save_screenshot("screenshot_timeout_error.png")
         raise
     except Exception as e:
         logging.error(f"Erreur lors de la connexion à Twitter : {e}")
+        driver.save_screenshot("screenshot_login_error.png")
         raise
 
-# Génération d'un tweet avec GPT
+# Génération de contenu avec GPT
 def generate_tweet_content():
     try:
         logging.info("Génération du contenu du tweet avec ChatGPT...")
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Tu es un bot inspirant et drôle qui publie des tweets motivants et humoristiques."},
-                {"role": "user", "content": "Donne-moi une idée de tweet inspirant ou humoristique."}
+                {"role": "system", "content": "Tu es un bot créatif et drôle. Crée un tweet intéressant ou motivant."},
+                {"role": "user", "content": "Génère un tweet pour aujourd'hui."}
             ],
             max_tokens=100,
             temperature=0.7
         )
         return response['choices'][0]['message']['content'].strip()
     except Exception as e:
-        logging.error(f"Erreur lors de la génération du contenu du tweet : {e}")
-        return "Je suis actuellement en panne d'inspiration... Reviens plus tard !"
+        logging.error(f"Erreur lors de la génération de contenu : {e}")
+        return "Je suis en panne d'inspiration aujourd'hui, mais restez motivé !"
 
 # Publication d'un tweet
 def post_tweet(content):
     try:
-        logging.info(f"Publication du tweet : {content}")
+        logging.info("Publication du tweet...")
         driver.get("https://twitter.com/compose/tweet")
-        wait = WebDriverWait(driver, 30)
+        wait = WebDriverWait(driver, 60)
 
-        tweet_box = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@data-testid='tweetTextarea_0']")))
-        tweet_box.send_keys(content)
+        tweet_field = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@data-testid='tweetTextarea_0']")))
+        tweet_field.send_keys(content)
 
-        tweet_button = driver.find_element(By.XPATH, "//div[@data-testid='tweetButtonInline']")
+        tweet_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@data-testid='tweetButton']")))
         tweet_button.click()
 
         logging.info("Tweet publié avec succès.")
+        driver.save_screenshot("screenshot_after_tweet.png")
     except TimeoutException:
         logging.error("Erreur : délai expiré lors de la publication du tweet.")
+        driver.save_screenshot("screenshot_tweet_error.png")
     except Exception as e:
         logging.error(f"Erreur lors de la publication du tweet : {e}")
+        driver.save_screenshot("screenshot_post_tweet_error.png")
 
 # Fonction principale
 def main():
+    login_to_twitter()
+    while True:
+        tweet_content = generate_tweet_content()
+        post_tweet(tweet_content)
+        logging.info("Pause d'une heure avant le prochain tweet.")
+        time.sleep(3600)
+
+if __name__ == "__main__":
     try:
-        login_to_twitter()
-        while True:
-            tweet_content = generate_tweet_content()
-            post_tweet(tweet_content)
-            logging.info("Pause d'une heure avant la prochaine publication.")
-            time.sleep(3600)  # Pause de 1 heure
+        main()
     except Exception as e:
         logging.critical(f"Erreur critique : {e}")
     finally:
-        logging.info("Le script continue pour éviter que le processus ne s'arrête.")
-        time.sleep(60)  # Pause de 1 minute avant de réessayer
-
-if __name__ == "__main__":
-    while True:
-        try:
-            main()
-        except Exception as main_error:
-            logging.error(f"Redémarrage après une erreur dans la boucle principale : {main_error}")
-            time.sleep(300)  # Attente de 5 minutes avant de redémarrer
+        driver.quit()
